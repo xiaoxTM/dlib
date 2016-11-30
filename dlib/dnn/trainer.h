@@ -22,7 +22,7 @@
 #include <future>
 #include <exception>
 #include <mutex>
-
+#include <cstdarg>
 namespace dlib
 {
 
@@ -49,6 +49,28 @@ namespace dlib
             a.t.swap(b.t);
             a.have_data.swap(b.have_data);
         }
+    }
+
+    static std::string va_format(const char *format, va_list arg) {
+        std::string ret;
+        
+        std::unique_ptr<char [] > formatted;
+        int buffer_size = 1024;
+        int needed = 0;
+        if (format != NULL) {
+            while (true) {
+                formatted.reset(new char[buffer_size]);
+                needed = vsnprintf(&formatted[0], buffer_size, format, arg);
+                if (needed <= 0 || needed > buffer_size) {
+                    buffer_size += std::abs(needed - buffer_size + 1);
+                } else {
+                    break;
+                }
+            }
+            ret(*formatted);
+            formatted.release();
+        }
+        return ret;
     }
 
 
@@ -203,7 +225,7 @@ namespace dlib
         )
         {
             DLIB_CASSERT(std::distance(dbegin, dend) > 0);
-
+            /*
             if (verbose)
             {
                 using namespace std::chrono;
@@ -218,6 +240,7 @@ namespace dlib
                     clear_average_loss();
                 }
             }
+            */
             sync_to_disk();
             send_job(dbegin, dend, lbegin);
 
@@ -240,6 +263,7 @@ namespace dlib
         )
         {
             DLIB_CASSERT(std::distance(dbegin, dend) > 0);
+            /*
             if (verbose)
             {
                 using namespace std::chrono;
@@ -254,6 +278,7 @@ namespace dlib
                     clear_average_loss();
                 }
             }
+            */
             sync_to_disk();
             send_job(dbegin, dend);
             ++train_one_step_calls;
@@ -274,11 +299,13 @@ namespace dlib
                 epoch_iteration < max_num_epochs && learning_rate >= min_learning_rate; 
                 ++epoch_iteration)
             {
-                using namespace std::chrono;
-                last_time = system_clock::now();
+                std::cout << "Epoch " << epoch_iteration + 1 << " learning rate: " << learning_rate << std::endl;
+                //using namespace std::chrono;
+                //last_time = system_clock::now();
                 clear_average_loss();
                 for (; epoch_pos < data.size() && learning_rate >= min_learning_rate; epoch_pos += mini_batch_size)
                 {
+                    /*
                     if (verbose)
                     {
                         auto now_time = system_clock::now();
@@ -292,15 +319,19 @@ namespace dlib
                             print_progress();
                         }
                     }
-
+                    */
                     sync_to_disk();
                     send_job(data.begin()+epoch_pos, 
                               data.begin()+std::min(epoch_pos+mini_batch_size,data.size()), 
                               labels.begin()+epoch_pos);
                     updated_the_network = true;
+                    size_t ith = epoch_pos + mini_batch_size;
+                    if (ith > data.size())
+                        ith = data.size() - 1;
+                    print_progress<20, false>(ith, data.size(), NULL);
                 }
                 epoch_pos = 0;
-
+                /*
                 if (verbose)
                 {
                     // Capitalize the E in Epoch so it's easy to grep out the lines that
@@ -310,6 +341,8 @@ namespace dlib
                               << "average loss: " << rpad(cast_to_string(get_average_loss()),string_pad) << "  ";
                     print_progress();
                 }
+                */
+                std::cout << std::endl;
             }
             wait_for_thread_to_pause();
             // if we modified the network at all then be sure to sync the final result.
@@ -334,11 +367,13 @@ namespace dlib
                 epoch_iteration < max_num_epochs && learning_rate >= min_learning_rate; 
                 ++epoch_iteration)
             {
-                using namespace std::chrono;
-                last_time = system_clock::now();
+                std::cout << "Epoch " << epoch_iteration + 1 << " learning rate: " << learning_rate << std::endl;
+                //using namespace std::chrono;
+                //last_time = system_clock::now();
                 clear_average_loss();
                 for (; epoch_pos < data.size() && learning_rate >= min_learning_rate; epoch_pos += mini_batch_size)
                 {
+                    /*
                     if (verbose)
                     {
                         auto now_time = system_clock::now();
@@ -352,14 +387,18 @@ namespace dlib
                             print_progress();
                         }
                     }
-
+                    */
                     sync_to_disk();
                     send_job(data.begin()+epoch_pos, 
                              data.begin()+std::min(epoch_pos+mini_batch_size,data.size()));
                     updated_the_network = true;
+                    size_t ith = epoch_pos + mini_batch_size;
+                    if (ith > data.size())
+                        ith = data.size() - 1;
+                    print_progress<20, false>(ith, data.size(), NULL);
                 }
                 epoch_pos = 0;
-
+                /*
                 if (verbose)
                 {
                     // Capitalize the E in Epoch so it's easy to grep out the lines that
@@ -369,6 +408,8 @@ namespace dlib
                               << "average loss: " << rpad(cast_to_string(get_average_loss()),string_pad) << "  ";
                     print_progress();
                 }
+                */
+                std::cout << std::endl;
             }
             wait_for_thread_to_pause();
             // if we modified the network at all then be sure to sync the final result.
@@ -1012,8 +1053,15 @@ namespace dlib
             send_job(dbegin, dend, nothing);
         }
 
-        void print_progress()
+        template <
+            size_t num = 10,
+            bool brief = true,
+            char nc = 'x',
+            char cc = '+'
+            >
+        void print_progress(size_t ith, size_t total, const char * format, ...)
         {
+            /*
             if (lr_schedule.size() == 0)
             {
                 std::cout << "steps without apparent progress: " << steps_without_progress;
@@ -1025,6 +1073,42 @@ namespace dlib
                 std::cout << sout.str();
             }
             std::cout << std::endl;
+            */
+            assert(num != 0 && total != 0);
+            std::string msg;
+	        if (format != NULL) {
+                va_list arg_list;
+                va_start(arg_list, format);
+                msg.append(va_format(format, arg_list));
+                va_end(arg_list);
+             }
+             ++ith;
+
+            double size = total / static_cast<double> (num);
+            size_t div = static_cast<size_t> (std::ceil(ith / size) - 1);
+            size_t step = std::ceil(num / static_cast<double> (total)) - 1;
+            if (step == 0)
+                step = 1;
+            static size_t len = num;
+            static char prompt[num+1] = {cc};
+            prompt[num] = '\0';
+
+            if (div >= len) {
+                div = len - 1;
+            }
+            if (div > 0)
+                std::fill_n(prompt, div, cc);
+            if (prompt[div] == nc || ith == total) {
+                prompt[div] = cc;
+            } else {
+                prompt[div] = nc;
+            }
+            prompt[div + 1] = '\0';
+            if (brief) {
+                std::cout << msg << " [" << std::setw(num) << std::left << prompt << ", " << std::setprecision(5) << (ith * 100 / total) << "\%]\r" << std::flush;
+            } else {
+                std::cout << msg << " [" << std::setw(num) << std::left << prompt << ", " << ith << " / " << total << ", " << std::setprecision(5) << (ith * 100 / total) << "\%]\r" << std::flush;
+            }
         }
 
         std::vector<std::shared_ptr<device_data>> devices;
@@ -1077,4 +1161,3 @@ namespace dlib
 }
 
 #endif // DLIB_DNn_TRAINER_H_
-
